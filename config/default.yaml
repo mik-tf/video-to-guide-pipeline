@@ -23,8 +23,8 @@ transcription:
   initial_prompt: ""        # Initial prompt for context
   condition_on_previous_text: true
   word_timestamps: false    # Include word-level timestamps
-  prepend_punctuations: "\"'"¿([{-"
-  append_punctuations: "\"'.。,，!！?？:：")]}、"
+  prepend_punctuations: '"¿([{-'
+  append_punctuations: '".。,，!！?？:：)]}、'
 
 # Guide Generation Settings
 guide_generation:

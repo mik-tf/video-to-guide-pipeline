@@ -80,48 +80,90 @@ This pipeline combines AI-powered transcription with intelligent text processing
 ✅ **No usage limits or quotas**  
 ✅ **Complete data privacy**  
 
+## 📋 Prerequisites
+
+**System Requirements:**
+- **Python 3.8+** - Check with `python3 --version`
+- **FFmpeg** - Install with `sudo apt install ffmpeg` (Ubuntu) or `brew install ffmpeg` (macOS)
+- **4GB+ RAM** - For Whisper model processing
+- **Git** - For cloning the repository
+
+**Optional:**
+- **NVIDIA GPU** - For faster transcription (auto-detected)
+- **8GB+ RAM** - For larger Whisper models
+
 ## 🚀 Quick Start
 
-### Prerequisites
+### One-Command Setup
 
-- Python 3.8+
-- FFmpeg installed on your system
-- 4GB+ RAM (for Whisper models)
+```bash
+# Clone and setup everything
+git clone https://github.com/mik-tf/video-to-guide-pipeline.git
+cd video-to-guide-pipeline
+make setup
+```
 
-### Installation
+**That's it!** The Makefile handles:
+- ✅ Python 3.8+ and FFmpeg verification
+- ✅ Virtual environment creation
+- ✅ PyTorch installation (GPU/CPU auto-detection)
+- ✅ All dependencies installation
+- ✅ Directory structure creation
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/mik-tf/video-to-guide-pipeline.git
-   cd video-to-guide-pipeline
-   ```
+### Process Videos
 
-2. **Set up the environment:**
-   ```bash
-   ./scripts/setup_environment.sh
-   ```
+```bash
+# Process all videos in ./videos directory
+make process-videos
 
-3. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+# Process a single video
+make process-single VIDEO=path/to/video.mp4
 
-### Basic Usage
+# Run interactive demo
+make demo
+```
 
-1. **Place your videos in the `videos/` directory**
+## 🛠️ Makefile Commands
 
-2. **Run the complete pipeline:**
-   ```bash
-   python scripts/process_videos.py --config config/default.yaml
-   ```
+| Command | Description |
+|---------|-------------|
+| `make setup` | **Complete setup** - Creates venv, installs dependencies, sets up directories |
+| `make process-videos` | **Process all videos** in `./videos/` directory |
+| `make process-single VIDEO=path.mp4` | **Process single video** |
+| `make demo` | **Interactive demo** with examples |
+| `make check-deps` | **Check system dependencies** (Python, FFmpeg, GPU) |
+| `make clean` | **Clean output files** (keeps venv) |
+| `make clean-all` | **Clean everything** including venv |
+| `make help` | **Show all commands** with examples |
 
-3. **Find your generated guides in `output/guides/`**
+### Usage Examples
+
+```bash
+# First time setup
+make setup
+
+# Activate the Python environment
+source venv/bin/activate
+
+# Add videos to ./videos/ directory
+cp ~/my-tutorial.mp4 videos/
+
+# Process all videos
+make process-videos
+
+# Process specific video
+make process-single VIDEO=videos/my-tutorial.mp4
+
+# Check what was generated
+ls output/guides/
+```
 
 ## 📁 Project Structure
 
 ```
 video-to-guide-pipeline/
 ├── README.md                    # This file
+├── Makefile                     # 🎯 Main entry point - all commands
 ├── requirements.txt             # Python dependencies
 ├── .gitignore                  # Git ignore rules
 ├── .env.example                # Environment variables template
@@ -217,21 +259,39 @@ guide_generation:
 - **Fast Processing**: Use `tiny` for quick drafts or testing
 - **GPU Available**: Enable `fp16: true` and `device: "cuda"` for 2x speed boost
 
-## 📖 Usage Examples
+## 📚 Usage Examples
 
 ### Process a Single Video
 ```bash
-python scripts/process_videos.py --input videos/tutorial.mp4 --template deployment_guide
+# Simple single video processing
+make process-single VIDEO=videos/tutorial.mp4
+
+# Or activate venv and use Python directly
+source venv/bin/activate
+python scripts/process_videos.py --input videos/tutorial.mp4
 ```
 
 ### Batch Process Multiple Videos
 ```bash
-python scripts/process_videos.py --batch --config config/batch_processing.yaml
+# Process all videos in ./videos directory
+make process-videos
+
+# Check system before processing
+make check-deps
+make process-videos
 ```
 
-### Custom Template
+### Advanced Usage
 ```bash
-python scripts/process_videos.py --input videos/demo.mp4 --template custom --template-file templates/my_template.md
+# Interactive demo with examples
+make demo
+
+# Clean previous results and reprocess
+make clean
+make process-videos
+
+# Check what's available
+make help
 ```
 
 ## 🎯 Use Cases
@@ -241,6 +301,67 @@ python scripts/process_videos.py --input videos/demo.mp4 --template custom --tem
 - **📋 Process Documentation** - Document complex procedures from video demonstrations
 - **🔄 Knowledge Transfer** - Preserve institutional knowledge from video content
 - **📝 Content Repurposing** - Convert video content into multiple documentation formats
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+**❌ "FFmpeg not found"**
+```bash
+# Ubuntu/Debian
+sudo apt update && sudo apt install ffmpeg
+
+# macOS
+brew install ffmpeg
+
+# Verify installation
+ffmpeg -version
+```
+
+**❌ "Python 3.8+ required"**
+```bash
+# Check current version
+python3 --version
+
+# Ubuntu: Install newer Python
+sudo apt install python3.9 python3.9-venv
+```
+
+**❌ "No videos found"**
+```bash
+# Check videos directory
+ls -la videos/
+
+# Copy videos to correct location
+cp ~/Downloads/*.mp4 videos/
+```
+
+**❌ "Virtual environment issues"**
+```bash
+# Clean and recreate
+make clean-all
+make setup
+```
+
+**❌ "Out of memory during processing"**
+```bash
+# Use smaller Whisper model
+# Edit config/default.yaml:
+# model_name: "tiny"  # or "base"
+```
+
+### Getting Help
+
+```bash
+# Check system status
+make check-deps
+
+# Show all available commands
+make help
+
+# Run interactive demo
+make demo
+```
 
 ## 🛠️ Advanced Features
 
@@ -256,6 +377,13 @@ python scripts/validate_output.py --check-transcription --check-guides
 ### Docker Deployment
 Run the entire pipeline in a containerized environment:
 ```bash
+# Build Docker image
+make docker-build
+
+# Run with Docker (processes videos/ directory)
+make docker-run
+
+# Or use docker-compose
 docker-compose up --build
 ```
 
