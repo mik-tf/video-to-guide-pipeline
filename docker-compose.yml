@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  video-to-guide:
+    build: .
+    container_name: video-to-guide-pipeline
+    volumes:
+      - ./videos:/app/videos:ro
+      - ./output:/app/output
+      - ./config:/app/config:ro
+      - ./templates:/app/templates:ro
+      - whisper-cache:/app/.cache/whisper
+    environment:
+      - WHISPER_CACHE_DIR=/app/.cache/whisper
+      - LOG_LEVEL=INFO
+    command: python scripts/process_videos.py --batch --input videos/
+    
+  # Development service with interactive shell
+  video-to-guide-dev:
+    build: .
+    container_name: video-to-guide-dev
+    volumes:
+      - ./videos:/app/videos
+      - ./output:/app/output
+      - ./config:/app/config
+      - ./templates:/app/templates
+      - ./src:/app/src
+      - ./scripts:/app/scripts
+      - whisper-cache:/app/.cache/whisper
+    environment:
+      - WHISPER_CACHE_DIR=/app/.cache/whisper
+      - LOG_LEVEL=DEBUG
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
+volumes:
+  whisper-cache:
