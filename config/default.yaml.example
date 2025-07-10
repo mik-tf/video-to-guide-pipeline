@@ -1,0 +1,131 @@
+# Default Configuration for Video-to-Guide Pipeline
+
+# Processing Mode Selection
+# Options: basic, local_ai, api_transcription, api_generation, full_api, hybrid
+processing_mode: "basic"
+
+# Audio Extraction Settings
+audio:
+  sample_rate: 16000        # 16kHz optimal for speech recognition
+  channels: 1               # Mono audio
+  format: "wav"             # Output format
+  codec: "pcm_s16le"        # PCM 16-bit little-endian
+  quality: "high"           # high, medium, low
+
+# Transcription Settings
+transcription:
+  # Local Whisper Settings
+  local:
+    model: "small"            # tiny, base, small, medium, large, large-v2
+    language: "en"            # Language code (auto-detect if null)
+    device: "cpu"             # cpu, cuda
+    fp16: false               # Use half precision (GPU only)
+    temperature: 0.0          # Sampling temperature
+    best_of: 5                # Number of candidates to consider
+    beam_size: 5              # Beam search size
+    patience: 1.0             # Beam search patience
+    length_penalty: 1.0       # Length penalty for beam search
+    suppress_tokens: [-1]     # Tokens to suppress
+    initial_prompt: "Write a prompt here."
+    condition_on_previous_text: true
+    word_timestamps: false    # Include word-level timestamps
+    prepend_punctuations: '"¿([{-'
+    append_punctuations: '"。,，!！?？:：)]}、'
+  
+  # API Transcription Settings
+  api:
+    provider: "huggingface"    # huggingface, openrouter, openai, deepgram
+    model: "openai/whisper-large-v3"  # Provider-specific model
+    api_key_env: "HUGGINGFACE_API_KEY"  # Environment variable for API key
+    base_url: "https://api-inference.huggingface.co/models"  # API base URL
+    fallback_to_local: true    # Fallback to local if API fails
+    timeout: 300               # Request timeout in seconds
+    max_retries: 3             # Maximum retry attempts
+    # Chunking settings for large files
+    max_file_size_mb: 25       # HuggingFace limit
+    target_chunk_size_mb: 20   # Target chunk size
+    chunk_duration_seconds: 300 # 5 minutes per chunk
+    chunk_overlap_seconds: 10  # Overlap between chunks
+
+# Guide Generation Settings
+guide_generation:
+  # Template-based Generation (Basic Mode)
+  template:
+    name: "deployment_guide"     # Default template to use
+    include_timestamps: false    # Include transcription timestamps
+    max_section_length: 500      # Maximum words per section
+    min_section_length: 50       # Minimum words per section
+    auto_generate_toc: true      # Generate table of contents
+    include_metadata: true       # Include processing metadata
+    format_code_blocks: true     # Auto-format code snippets
+    extract_commands: true       # Extract shell commands
+    extract_urls: true           # Extract and validate URLs
+  
+  # Local AI Generation (Ollama)
+  local_ai:
+    model: "llama3.2:3b"         # Ollama model to use
+    host: "http://localhost:11434" # Ollama server URL
+    temperature: 0.1             # Generation temperature (0.0-1.0)
+    max_tokens: 4000             # Maximum tokens to generate
+    system_prompt: "You are a technical documentation expert specializing in cloud infrastructure, virtualization, and deployment guides. Create clear, structured, step-by-step guides from video transcriptions."
+    fallback_to_template: true   # Fallback to template mode if AI fails
+    timeout: 120                 # Request timeout in seconds
+  
+  # API AI Generation
+  api:
+    provider: "openrouter"       # openrouter, openai, anthropic
+    model: "anthropic/claude-3.5-sonnet" # Provider-specific model
+    api_key_env: "OPENROUTER_API_KEY" # Environment variable for API key
+    base_url: "https://openrouter.ai/api/v1" # API base URL
+    temperature: 0.1             # Generation temperature
+    max_tokens: 4000             # Maximum tokens to generate
+    system_prompt: "You are a technical documentation expert. Transform video transcriptions into professional, structured deployment guides with clear steps, code blocks, and troubleshooting sections."
+    fallback_to_local_ai: true   # Fallback to local AI if API fails
+    fallback_to_template: true   # Final fallback to template mode
+    timeout: 60                  # Request timeout in seconds
+    max_retries: 3               # Maximum retry attempts
+  
+# Processing Settings
+processing:
+  batch_size: 1                 # Number of videos to process simultaneously
+  max_workers: 2                # Maximum worker threads
+  cleanup_temp_files: true      # Clean up temporary files after processing
+  preserve_intermediate: false  # Keep audio and transcription files
+  overwrite_existing: false     # Overwrite existing output files
+  
+# Quality Assurance
+quality:
+  min_audio_duration: 10        # Minimum audio duration (seconds)
+  max_audio_duration: 7200      # Maximum audio duration (seconds)
+  min_transcription_length: 100 # Minimum transcription length (characters)
+  confidence_threshold: 0.7     # Minimum confidence score
+  enable_spell_check: true      # Enable spell checking
+  enable_grammar_check: false   # Enable grammar checking (requires additional setup)
+
+# Output Settings
+output:
+  base_dir: "./output"
+  audio_dir: "audio"
+  transcription_dir: "transcriptions"
+  guide_dir: "guides"
+  create_subdirs: true          # Create subdirectories by date/project
+  filename_template: "{video_name}_{timestamp}"
+  
+# Logging Settings
+logging:
+  level: "INFO"                 # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "./logs/pipeline.log"
+  max_file_size: "10MB"
+  backup_count: 5
+  console_output: true
+
+# Template Settings
+templates:
+  base_dir: "./templates"
+  custom_dir: "./templates/custom"
+  variables:
+    author: "Video-to-Guide Pipeline"
+    version: "1.0.0"
+    generated_date: true
+    include_footer: true

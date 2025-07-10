@@ -81,8 +81,12 @@ videos/*.mp4
 videos/*.avi
 videos/*.mov
 videos/*.mkv
+output/*
 output/audio/*.wav
 output/audio/*.mp3
+# Config files (keep only .example versions)
+config/default.yaml
+default.yaml
 
 # Whisper model cache
 ~/.cache/whisper/

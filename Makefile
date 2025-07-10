@@ -1,30 +1,42 @@
 # Video-to-Guide Pipeline Makefile
 # Handles virtual environment setup, dependencies, and common tasks
 
-.PHONY: help setup install clean test run demo process-videos check-deps docker-build docker-run
+.PHONY: help setup install clean test run demo process-videos process-basic process-local-ai process-api-trans process-api-gen process-full-api process-hybrid check-deps info activate _check_videos
 
 # Default target
 help:
 	@echo "🎬 Video-to-Guide Pipeline"
 	@echo "=========================="
 	@echo ""
-	@echo "Available targets:"
+	@echo "Setup & Dependencies:"
 	@echo "  setup          - Complete environment setup (venv + dependencies)"
 	@echo "  install        - Install dependencies in existing venv"
 	@echo "  check-deps     - Check system dependencies"
-	@echo "  demo           - Run interactive demo"
-	@echo "  process-videos - Process all videos in ./videos directory"
+	@echo ""
+	@echo "Processing Modes:"
+	@echo "  process-basic     - Template-based processing (default)"
+	@echo "  process-local-ai  - Local AI with Ollama"
+	@echo "  process-api-trans - API transcription + template guide"
+	@echo "  process-api-gen   - Template transcription + API guide"
+	@echo "  process-full-api  - Full API (transcription + guide)"
+	@echo "  process-hybrid    - Hybrid with fallback chain"
+	@echo ""
+	@echo "Legacy/Batch:"
+	@echo "  process-videos - Process all videos (basic mode)"
 	@echo "  process-single - Process single video (VIDEO=path/to/video.mp4)"
+	@echo ""
+	@echo "Other:"
+	@echo "  demo           - Run interactive demo"
 	@echo "  test           - Run tests"
 	@echo "  clean          - Clean up generated files"
 	@echo "  clean-all      - Clean everything including venv"
-	@echo "  docker-build   - Build Docker image"
-	@echo "  docker-run     - Run in Docker container"
+	@echo "  info           - Show system information"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make setup                    # First-time setup"
-	@echo "  make process-videos           # Process all videos"
-	@echo "  make process-single VIDEO=videos/demo.mp4"
+	@echo "  make process-local-ai         # Process with Ollama AI"
+	@echo "  make process-hybrid           # Best quality with fallbacks"
+	@echo "  make process-single VIDEO=videos/demo.mp4 MODE=local_ai"
 	@echo ""
 
 # Python and virtual environment settings
@@ -92,6 +104,12 @@ setup:
 		echo "📄 Created .env file from template"; \
 	fi
 	
+	# Copy config file
+	@if [ ! -f "config/default.yaml" ] && [ -f "config/default.yaml.example" ]; then \
+		cp config/default.yaml.example config/default.yaml; \
+		echo "📄 Created config/default.yaml from template"; \
+	fi
+	
 	@echo ""
 	@echo "✅ Setup complete!"
 	@echo ""
@@ -147,9 +165,9 @@ demo: check-venv
 	@echo "🎯 Running interactive demo..."
 	@cd $(shell pwd) && $(VENV_PYTHON) scripts/demo.py --interactive
 
-# Process all videos in ./videos directory
+# Process all videos in ./videos directory (basic mode)
 process-videos: check-venv
-	@echo "🎬 Processing all videos..."
+	@echo "🎬 Processing all videos (basic mode)..."
 	@if [ ! -d "videos" ] || [ -z "$$(ls -A videos/ 2>/dev/null)" ]; then \
 		echo "❌ No videos found in ./videos directory"; \
 		echo "   Place video files in ./videos/ and try again"; \
@@ -158,23 +176,82 @@ process-videos: check-venv
 	@echo "📹 Found videos:"
 	@ls -la videos/
 	@echo ""
-	@cd $(shell pwd) && $(VENV_PYTHON) scripts/process_videos.py --batch --input videos/
+	@cd $(shell pwd) && $(VENV_PYTHON) scripts/process_videos.py --batch --input videos/ --mode basic
 	@echo ""
 	@echo "✅ Processing complete! Check ./output/guides/ for results"
+
+# Processing mode targets
+process-basic: check-venv
+	@echo "🎬 Processing videos with template-based generation..."
+	@$(MAKE) _check_videos
+	@cd $(shell pwd) && $(VENV_PYTHON) scripts/process_videos.py --batch --input videos/ --mode basic
+	@echo "✅ Basic processing complete!"
+
+process-local-ai: check-venv
+	@echo "🤖 Processing videos with local AI (Ollama)..."
+	@echo "Note: Requires Ollama server running locally"
+	@$(MAKE) _check_videos
+	@cd $(shell pwd) && $(VENV_PYTHON) scripts/process_videos.py --batch --input videos/ --mode local_ai
+	@echo "✅ Local AI processing complete!"
+
+process-api-trans: check-venv
+	@echo "🌐 Processing videos with API transcription + template guide..."
+	@echo "Note: Requires API key in .env file"
+	@$(MAKE) _check_videos
+	@cd $(shell pwd) && $(VENV_PYTHON) scripts/process_videos.py --batch --input videos/ --mode api_transcription
+	@echo "✅ API transcription processing complete!"
+
+process-api-gen: check-venv
+	@echo "🌐 Processing videos with local transcription + API guide generation..."
+	@echo "Note: Requires API key in .env file"
+	@$(MAKE) _check_videos
+	@cd $(shell pwd) && $(VENV_PYTHON) scripts/process_videos.py --batch --input videos/ --mode api_generation
+	@echo "✅ API guide generation processing complete!"
+
+process-full-api: check-venv
+	@echo "🌐 Processing videos with full API (transcription + guide generation)..."
+	@echo "Note: Requires API key in .env file"
+	@$(MAKE) _check_videos
+	@cd $(shell pwd) && $(VENV_PYTHON) scripts/process_videos.py --batch --input videos/ --mode full_api
+	@echo "✅ Full API processing complete!"
+
+process-hybrid: check-venv
+	@echo "🔄 Processing videos with hybrid mode (API → Local AI → Template fallback)..."
+	@echo "Note: Best quality with automatic fallbacks"
+	@$(MAKE) _check_videos
+	@cd $(shell pwd) && $(VENV_PYTHON) scripts/process_videos.py --batch --input videos/ --mode hybrid
+	@echo "✅ Hybrid processing complete!"
+
+# Helper target to check for videos
+_check_videos:
+	@if [ ! -d "videos" ] || [ -z "$$(ls -A videos/ 2>/dev/null)" ]; then \
+		echo "❌ No videos found in ./videos directory"; \
+		echo "   Place video files in ./videos/ and try again"; \
+		exit 1; \
+	fi
+	@echo "📹 Found videos:"
+	@ls -la videos/
+	@echo ""
 
 # Process single video
 process-single: check-venv
 	@if [ -z "$(VIDEO)" ]; then \
 		echo "❌ Please specify VIDEO=path/to/video.mp4"; \
 		echo "   Example: make process-single VIDEO=videos/demo.mp4"; \
+		echo "   With mode: make process-single VIDEO=videos/demo.mp4 MODE=local_ai"; \
 		exit 1; \
 	fi
 	@if [ ! -f "$(VIDEO)" ]; then \
 		echo "❌ Video file not found: $(VIDEO)"; \
 		exit 1; \
 	fi
-	@echo "🎬 Processing video: $(VIDEO)"
-	@cd $(shell pwd) && $(VENV_PYTHON) scripts/process_videos.py --input "$(VIDEO)"
+	@if [ -n "$(MODE)" ]; then \
+		echo "🎬 Processing video: $(VIDEO) (mode: $(MODE))"; \
+		cd $(shell pwd) && $(VENV_PYTHON) scripts/process_videos.py --input "$(VIDEO)" --mode "$(MODE)"; \
+	else \
+		echo "🎬 Processing video: $(VIDEO) (basic mode)"; \
+		cd $(shell pwd) && $(VENV_PYTHON) scripts/process_videos.py --input "$(VIDEO)"; \
+	fi
 	@echo "✅ Processing complete!"
 
 # Run tests
@@ -182,13 +259,80 @@ test: check-venv
 	@echo "🧪 Running tests..."
 	@cd $(shell pwd) && $(VENV_PYTHON) -m pytest tests/ -v
 
-# Clean generated files
+# Show system information and processing mode status
+info:
+	@echo "📊 Video-to-Guide Pipeline System Information"
+	@echo "============================================="
+	@echo ""
+	@echo "💻 System Status:"
+	@python3 --version 2>/dev/null || echo "  ❌ Python 3 not found"
+	@ffmpeg -version 2>/dev/null | head -1 || echo "  ❌ FFmpeg not found"
+	@if [ -d "venv" ]; then echo "  ✅ Virtual environment exists"; else echo "  ❌ Virtual environment missing"; fi
+	@echo ""
+	@echo "🤖 AI Processing Capabilities:"
+	@if command -v ollama >/dev/null 2>&1; then \
+		echo "  ✅ Ollama installed"; \
+		if pgrep -f "ollama serve" >/dev/null; then \
+			echo "  ✅ Ollama server running"; \
+			ollama list 2>/dev/null | grep -v "NAME" | head -3 | sed 's/^/    - /' || echo "    No models installed"; \
+		else \
+			echo "  ⚠️  Ollama server not running (run: ollama serve)"; \
+		fi; \
+	else \
+		echo "  ❌ Ollama not installed (local AI unavailable)"; \
+	fi
+	@echo ""
+	@echo "🌐 API Configuration:"
+	@if [ -f ".env" ]; then \
+		echo "  ✅ .env file exists"; \
+		if grep -q "OPENROUTER_API_KEY=" .env && ! grep -q "OPENROUTER_API_KEY=your_" .env; then \
+			echo "  ✅ OpenRouter API key configured"; \
+		else \
+			echo "  ❌ OpenRouter API key not configured"; \
+		fi; \
+		if grep -q "OPENAI_API_KEY=" .env && ! grep -q "OPENAI_API_KEY=your_" .env; then \
+			echo "  ✅ OpenAI API key configured"; \
+		else \
+			echo "  ❌ OpenAI API key not configured"; \
+		fi; \
+	else \
+		echo "  ❌ .env file missing (copy from .env.example)"; \
+	fi
+	@echo ""
+	@echo "📹 Available Processing Modes:"
+	@echo "  ✅ Basic Mode (template processing)"
+	@if command -v ollama >/dev/null 2>&1 && pgrep -f "ollama serve" >/dev/null; then \
+		echo "  ✅ Local AI Mode (Ollama)"; \
+	else \
+		echo "  ❌ Local AI Mode (requires Ollama)"; \
+	fi
+	@if [ -f ".env" ] && (grep -q "OPENROUTER_API_KEY=" .env || grep -q "OPENAI_API_KEY=" .env) && ! grep -q "your_" .env; then \
+		echo "  ✅ API Modes (transcription/generation)"; \
+		echo "  ✅ Hybrid Mode (with fallbacks)"; \
+	else \
+		echo "  ❌ API Modes (requires API key)"; \
+		echo "  ⚠️  Hybrid Mode (limited fallback)"; \
+	fi
+	@echo ""
+	@echo "📁 Directories:"
+	@if [ -d "videos" ]; then \
+		echo "  ✅ videos/ directory: $$(ls videos/ 2>/dev/null | wc -l) files"; \
+	else \
+		echo "  ❌ videos/ directory missing"; \
+	fi
+	@if [ -d "output" ]; then \
+		echo "  ✅ output/ directory exists"; \
+	else \
+		echo "  ❌ output/ directory missing"; \
+	fi
+	@echo ""
+	@echo "Run 'make help' for available commands"
+
+# Clean up generated files
 clean:
-	@echo "🧹 Cleaning generated files..."
-	@rm -rf output/audio/* output/transcriptions/* output/guides/*
-	@rm -rf logs/*
-	@rm -rf tmp/*
-	@echo "✅ Cleaned output directories"
+	@echo "🧹 Cleaning up generated files..."
+	@rm -rf output/audio/* output/transcriptions/* output/guides/* tmp/* 2>/dev/null || true
+	@echo "✅ Cleanup complete"
 
 # Clean everything including virtual environment
 clean-all: clean
@@ -211,10 +355,6 @@ docker-run:
 		-v $(shell pwd)/output:/app/output \
 		video-to-guide-pipeline \
 		python scripts/process_videos.py --batch --input videos/
-
-# Show system info
-info: check-venv
-	@cd $(shell pwd) && $(VENV_PYTHON) scripts/process_videos.py --system-info
 
 # Activate virtual environment (helper)
 activate:

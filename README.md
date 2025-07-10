@@ -16,41 +16,71 @@ This pipeline automates the process of converting video content into structured,
 
 ## ✨ Features
 
+### **Core Processing Capabilities**
 - **🎵 High-Quality Audio Extraction** - FFmpeg-powered audio extraction optimized for speech recognition
-- **🤖 Accurate Transcription** - OpenAI Whisper integration for precise speech-to-text conversion
-- **📋 Template-Based Guide Generation** - Structured markdown guide creation with customizable templates
+- **🤖 Multi-Mode Transcription** - Local Whisper + API transcription with intelligent fallback
+- **🧠 AI-Powered Guide Generation** - Local AI (Ollama) + API-based guide creation with template fallback
+- **🔄 Intelligent Fallback System** - Automatic degradation: API → Local AI → Template processing
+
+### **Processing Modes**
+- **📝 Basic Mode** - Template-based processing (original functionality)
+- **🤖 Local AI Mode** - Ollama LLM for enhanced guide generation
+- **🌐 API Modes** - OpenRouter/OpenAI integration for transcription and/or guide generation
+- **🔄 Hybrid Mode** - Best quality with automatic fallbacks across all methods
+
+### **Operational Features**
 - **⚡ Batch Processing** - Process multiple videos simultaneously
 - **🔧 Configurable Pipeline** - YAML-based configuration for different use cases
 - **📊 Quality Assurance** - Built-in tools for reviewing and validating output
-- **🐳 Docker Support** - Containerized deployment for consistent environments
+- **🔒 Privacy Control** - Choose between local-only, API-based, or hybrid processing
+- **💰 Cost Control** - Local processing ($0) vs API processing (pay-per-use)
 
 ## 🏗️ Architecture
 
-### **Two-Stage Processing Pipeline**
+### **Multi-Mode Processing Pipeline**
 
-This pipeline combines AI-powered transcription with intelligent text processing for **privacy, cost-efficiency, and offline capability**:
+This pipeline offers **6 processing modes** combining local AI, API services, and template processing with intelligent fallback mechanisms for **flexibility, quality, and reliability**:
 
-#### **Stage 1: Speech-to-Text (OpenAI Whisper - LOCAL)**
-- **Technology**: OpenAI's open-source Whisper model
-- **Execution**: Runs **locally on your machine** (no API calls)
-- **Cost**: **$0.00** - completely free after initial setup
-- **Privacy**: All audio processing happens offline
-- **Models Available**: 
-  - `tiny` - Fastest, basic accuracy (~39 MB)
-  - `base` - Good balance of speed/accuracy (~74 MB) **[Default]**
-  - `small` - Better accuracy (~244 MB)
-  - `medium` - High accuracy (~769 MB)
-  - `large` - Best accuracy (~1550 MB)
+### **Processing Modes Available**
 
-#### **Stage 2: Guide Generation (Template-Based Processing)**
-- **Technology**: Template-based text processing using Jinja2
-- **Method**: Intelligent pattern matching and structured formatting
-- **Processing**: 
-  - Extracts sections using natural language patterns
-  - Identifies commands with shell syntax recognition
-  - Finds URLs using regex validation
-  - Structures content using template engines
-- **Templates**: Customizable Markdown templates with structured formatting
+#### **1. Basic Mode** (`basic`) - Template Processing
+- **Transcription**: Local Whisper (OpenAI)
+- **Guide Generation**: Template-based processing with Jinja2
+- **Cost**: $0.00 (completely free)
+- **Privacy**: 100% local processing
+- **Use Case**: Cost-effective processing with basic quality
+
+#### **2. Local AI Mode** (`local_ai`) - Enhanced Local Processing
+- **Transcription**: Local Whisper (OpenAI)
+- **Guide Generation**: Local AI via Ollama (Llama2, Mistral, etc.)
+- **Cost**: $0.00 (completely free)
+- **Privacy**: 100% local processing
+- **Requirements**: Ollama server running locally
+- **Use Case**: High-quality guides without API costs
+
+#### **3. API Transcription Mode** (`api_transcription`) - Hybrid Transcription
+- **Transcription**: API-based (OpenRouter/OpenAI)
+- **Guide Generation**: Template-based processing
+- **Cost**: ~$0.006 per minute of audio
+- **Use Case**: Better transcription quality with template guides
+
+#### **4. API Generation Mode** (`api_generation`) - Hybrid Guide Generation
+- **Transcription**: Local Whisper (OpenAI)
+- **Guide Generation**: API-based (OpenRouter/OpenAI)
+- **Cost**: ~$0.01-0.05 per guide
+- **Use Case**: Local transcription with professional guide quality
+
+#### **5. Full API Mode** (`full_api`) - Complete API Processing
+- **Transcription**: API-based (OpenRouter/OpenAI)
+- **Guide Generation**: API-based (OpenRouter/OpenAI)
+- **Cost**: ~$0.02-0.08 per video
+- **Use Case**: Highest quality processing for critical content
+
+#### **6. Hybrid Mode** (`hybrid`) - Intelligent Fallback
+- **Fallback Chain**: API → Local AI → Template
+- **Automatic Degradation**: Ensures processing always completes
+- **Cost**: Variable (depends on successful fallback level)
+- **Use Case**: Best reliability with quality optimization
 
 ### **Key Architectural Benefits**
 
@@ -82,80 +112,225 @@ This pipeline combines AI-powered transcription with intelligent text processing
 
 ## 📋 Prerequisites
 
-**System Requirements:**
+### **Core Requirements (All Modes)**
 - **Python 3.8+** - Check with `python3 --version`
 - **FFmpeg** - Install with `sudo apt install ffmpeg` (Ubuntu) or `brew install ffmpeg` (macOS)
 - **4GB+ RAM** - For Whisper model processing
 - **Git** - For cloning the repository
 
-**Optional:**
-- **NVIDIA GPU** - For faster transcription (auto-detected)
-- **8GB+ RAM** - For larger Whisper models
+### **Mode-Specific Requirements**
+
+#### **Basic Mode** - No additional requirements
+
+#### **Local AI Mode**
+- **Ollama Server** - Install from [ollama.ai](https://ollama.ai)
+- **8GB+ RAM** - For running local LLM models
+- **Model Download** - `ollama pull llama2:7b-chat` (or preferred model)
+
+#### **API Modes**
+- **API Key** - OpenRouter (recommended) or OpenAI account
+- **Internet Connection** - For API calls
+- **Environment Variables** - Set in `.env` file
+
+#### **Hybrid Mode**
+- **All of the above** - For complete fallback capability
+
+### **Optional Enhancements**
+- **NVIDIA GPU** - For faster local transcription (auto-detected)
+- **16GB+ RAM** - For larger Whisper + LLM models simultaneously
 
 ## 🚀 Quick Start
 
-### One-Command Setup
+### 1. Basic Setup (All Modes)
 
 ```bash
 # Clone and setup everything
 git clone https://github.com/mik-tf/video-to-guide-pipeline.git
 cd video-to-guide-pipeline
 make setup
+
+# Copy configuration template
+cp config/default.yaml.example config/default.yaml
+cp .env.example .env
 ```
 
-**That's it!** The Makefile handles:
-- ✅ Python 3.8+ and FFmpeg verification
-- ✅ Virtual environment creation
-- ✅ PyTorch installation (GPU/CPU auto-detection)
-- ✅ All dependencies installation
-- ✅ Directory structure creation
+**That's it for basic mode!** The Makefile handles:
+- Virtual environment creation
+- Python dependency installation
+- System dependency verification
+- Configuration file setup
 
-### Process Videos
+### 2. Mode-Specific Setup
 
+#### **For Local AI Mode**
 ```bash
-# Process all videos in ./videos directory
-make process-videos
+# Install Ollama (one-time setup)
+curl -fsSL https://ollama.ai/install.sh | sh
 
-# Process a single video
-make process-single VIDEO=path/to/video.mp4
+# Start Ollama server
+ollama serve &
 
-# Run interactive demo
-make demo
+# Download a model (choose one)
+ollama pull llama2:7b-chat      # Recommended: Good balance
+ollama pull mistral:7b          # Alternative: Fast and capable
+ollama pull codellama:7b        # For technical content
+```
+
+#### **For API Modes**
+```bash
+# Copy environment template
+cp .env.example .env
+
+# Edit .env file and add your API key
+# Option 1: OpenRouter (recommended - cost-effective)
+OPENROUTER_API_KEY=your_key_here
+
+# Option 2: OpenAI (direct)
+OPENAI_API_KEY=your_key_here
+```
+
+**Get API Keys:**
+- **OpenRouter**: Sign up at [openrouter.ai](https://openrouter.ai) (recommended)
+- **OpenAI**: Sign up at [platform.openai.com](https://platform.openai.com)
+
+### 3. Process Videos with Different Modes
+
+#### **Basic Mode (Template Processing)**
+```bash
+# Add videos to ./videos directory
+cp ~/my-tutorial.mp4 videos/
+
+# Process with basic template mode
+make process-basic
+
+# Or process single video
+make process-single VIDEO=videos/tutorial.mp4
+```
+
+#### **Local AI Mode (Best Quality, No Cost)**
+```bash
+# Ensure Ollama is running
+ollama serve &
+
+# Process with local AI
+make process-local-ai
+
+# Or single video with local AI
+make process-single VIDEO=videos/tutorial.mp4 MODE=local_ai
+```
+
+#### **API Modes (Professional Quality)**
+```bash
+# Ensure API key is set in .env file
+
+# API transcription + template guide
+make process-api-trans
+
+# Local transcription + API guide generation
+make process-api-gen
+
+# Full API processing (highest quality)
+make process-full-api
+```
+
+#### **Hybrid Mode (Best Reliability)**
+```bash
+# Automatic fallback: API → Local AI → Template
+make process-hybrid
+
+# This mode ensures processing always completes
+# with the best quality possible given available resources
+```
+
+#### **Check Results**
+```bash
+# View generated guides
+ls output/guides/
+
+# View processing logs
+tail -f logs/pipeline.log
 ```
 
 ## 🛠️ Makefile Commands
 
+### **Setup & Dependencies**
 | Command | Description |
 |---------|-------------|
 | `make setup` | **Complete setup** - Creates venv, installs dependencies, sets up directories |
-| `make process-videos` | **Process all videos** in `./videos/` directory |
-| `make process-single VIDEO=path.mp4` | **Process single video** |
-| `make demo` | **Interactive demo** with examples |
+| `make info` | **System status** - Shows AI capabilities, API config, available modes |
 | `make check-deps` | **Check system dependencies** (Python, FFmpeg, GPU) |
 | `make clean` | **Clean output files** (keeps venv) |
 | `make clean-all` | **Clean everything** including venv |
+
+### **Processing Modes**
+| Command | Description | Requirements |
+|---------|-------------|-------------|
+| `make process-basic` | **Template processing** (original) | None |
+| `make process-local-ai` | **Local AI processing** with Ollama | Ollama server |
+| `make process-api-trans` | **API transcription** + template guide | API key |
+| `make process-api-gen` | **Local transcription** + API guide | API key |
+| `make process-full-api` | **Full API processing** (highest quality) | API key |
+| `make process-hybrid` | **Hybrid with fallbacks** (best reliability) | Optional: API key + Ollama |
+
+### **Legacy/Utilities**
+| Command | Description |
+|---------|-------------|
+| `make process-videos` | **Process all videos** (basic mode) |
+| `make process-single VIDEO=path.mp4` | **Process single video** |
+| `make process-single VIDEO=path.mp4 MODE=local_ai` | **Process single video** with specific mode |
+| `make demo` | **Interactive demo** with examples |
 | `make help` | **Show all commands** with examples |
 
 ### Usage Examples
 
+#### **Quick Start (Basic Mode)**
 ```bash
 # First time setup
 make setup
 
-# Activate the Python environment
-source venv/bin/activate
-
 # Add videos to ./videos/ directory
 cp ~/my-tutorial.mp4 videos/
 
-# Process all videos
-make process-videos
+# Process with template mode (free)
+make process-basic
 
-# Process specific video
-make process-single VIDEO=videos/my-tutorial.mp4
-
-# Check what was generated
+# Check results
 ls output/guides/
+```
+
+#### **High Quality Processing**
+```bash
+# Setup Ollama for local AI
+ollama serve &
+ollama pull llama2:7b-chat
+
+# Process with local AI (free, high quality)
+make process-local-ai
+
+# Or use API for best quality (requires API key)
+make process-full-api
+```
+
+#### **Reliable Processing**
+```bash
+# Hybrid mode with automatic fallbacks
+# Will try API → Local AI → Template until success
+make process-hybrid
+
+# Single video with specific mode
+make process-single VIDEO=videos/tutorial.mp4 MODE=hybrid
+```
+
+#### **Monitoring and Debugging**
+```bash
+# Watch processing logs in real-time
+tail -f logs/pipeline.log
+
+# Check system status
+make check-deps
+
+# View all available commands
+make help
 ```
 
 ## 📁 Project Structure
@@ -171,7 +346,8 @@ video-to-guide-pipeline/
 ├── Dockerfile                  # Container definition
 │
 ├── config/
-│   ├── default.yaml            # Default configuration
+│   ├── default.yaml.example    # Configuration template
+│   └── default.yaml            # Your local config (git-ignored)
 │   └── templates.yaml          # Template configurations
 │
 ├── src/
@@ -209,6 +385,71 @@ video-to-guide-pipeline/
     ├── templates.md            # Template customization
     └── api.md                  # API documentation
 ```
+
+## 🎯 Mode Selection Guide
+
+### **Which Mode Should I Use?**
+
+#### **For Learning/Testing**
+- **Basic Mode** (`make process-basic`)
+  - ✅ Free and fast
+  - ✅ No setup required
+  - ❌ Basic quality output
+  - **Best for**: Quick tests, learning the pipeline
+
+#### **For Regular Use**
+- **Local AI Mode** (`make process-local-ai`)
+  - ✅ Free after setup
+  - ✅ High quality output
+  - ✅ Complete privacy
+  - ❌ Requires Ollama setup
+  - **Best for**: Regular processing, privacy-conscious users
+
+#### **For Professional Content**
+- **Hybrid Mode** (`make process-hybrid`)
+  - ✅ Best reliability (always completes)
+  - ✅ Automatic quality optimization
+  - ✅ Fallback to free options
+  - ❌ May incur API costs
+  - **Best for**: Important content, production use
+
+- **Full API Mode** (`make process-full-api`)
+  - ✅ Highest quality output
+  - ✅ Professional transcription
+  - ❌ Requires API key and costs money
+  - **Best for**: Critical documentation, client work
+
+### **Cost Comparison**
+
+| Mode | Transcription Cost | Guide Generation Cost | Total per Hour |
+|------|-------------------|----------------------|----------------|
+| **Basic** | $0.00 | $0.00 | **$0.00** |
+| **Local AI** | $0.00 | $0.00 | **$0.00** |
+| **API Trans** | ~$0.36 | $0.00 | **~$0.36** |
+| **API Gen** | $0.00 | ~$0.02 | **~$0.02** |
+| **Full API** | ~$0.36 | ~$0.02 | **~$0.38** |
+| **Hybrid** | Variable | Variable | **$0.00-$0.38** |
+
+*Costs based on OpenRouter pricing for 1 hour of video content*
+
+### **Quality Hierarchy** (Best to Basic)
+
+| Rank | Mode | Transcription | Guide Generation | Cost/Hour | Best For |
+|------|------|---------------|------------------|-----------|----------|
+| **🥇 1st** | **Full API** | **Excellent** | **Excellent** | ~$0.38 | Critical documentation, client work |
+| **🥈 2nd** | **Hybrid** | **Best Available** | **Best Available** | $0.00-$0.38 | Production use, important content |
+| **🥉 3rd** | **Local AI** | Good | **Excellent** | $0.00 | Regular processing, privacy-focused |
+| **4th** | **Basic** | Good | Basic | $0.00 | Quick tests, learning |
+
+### **Quality Comparison by Aspect**
+
+| Aspect | Basic | Local AI | **Full API** | Hybrid |
+|--------|-------|----------|-------------|--------|
+| **Transcription** | Good | Good | **Excellent** | **Best Available** |
+| **Guide Structure** | Basic | Excellent | **Excellent** | **Best Available** |
+| **Technical Terms** | Poor | Good | **Excellent** | **Best Available** |
+| **Error Correction** | None | Good | **Excellent** | **Best Available** |
+| **Consistency** | High | High | **Highest** | **Highest** |
 
 ## 🔧 Configuration
 

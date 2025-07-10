@@ -2,7 +2,7 @@
 """
 Transcription Module
 
-Handles audio-to-text transcription using OpenAI Whisper with advanced configuration options.
+Handles audio-to-text transcription using local Whisper or API providers with fallback support.
 """
 
 import os
@@ -19,34 +19,77 @@ except ImportError:
     WHISPER_AVAILABLE = False
     logging.warning("OpenAI Whisper not available. Install with: pip install openai-whisper")
 
+from providers.openrouter import OpenRouterProvider
+from providers.huggingface import HuggingFaceProvider
+
 logger = logging.getLogger(__name__)
 
 
 class Transcriber:
     """
-    Handles audio transcription using OpenAI Whisper.
+    Handles audio transcription using local Whisper or API providers.
     
     Provides configurable transcription with quality assurance and metadata extraction.
     """
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], processing_mode: str = 'basic'):
         """
         Initialize the Transcriber.
         
         Args:
             config: Configuration dictionary with transcription settings
+            processing_mode: Processing mode (basic, local_ai, api_transcription, full_api, hybrid)
         """
-        if not WHISPER_AVAILABLE:
-            raise ImportError("OpenAI Whisper is required but not installed")
-            
         self.config = config.get('transcription', {})
-        self.model_name = self.config.get('model', 'base')
-        self.device = self.config.get('device', 'cpu')
-        self.language = self.config.get('language', 'en')
-        
-        # Load model
+        self.processing_mode = processing_mode
         self.model = None
+        self.api_provider = None
+        
+        # Initialize based on processing mode
+        # Local transcription setup (for basic, local_ai, hybrid, and as fallback for API modes)
+        if processing_mode in ['basic', 'local_ai', 'hybrid', 'api_generation', 'full_api']:
+            self._setup_local_transcription()
+        
+        # API transcription setup
+        if processing_mode in ['api_transcription', 'full_api', 'hybrid']:
+            self._setup_api_transcription()
+    
+    def _setup_local_transcription(self) -> None:
+        """Setup local Whisper transcription."""
+        if not WHISPER_AVAILABLE:
+            if self.processing_mode == 'basic':
+                raise ImportError("OpenAI Whisper is required but not installed")
+            logger.warning("OpenAI Whisper not available, skipping local setup")
+            return
+        
+        local_config = self.config.get('local', self.config)  # Fallback to root config for compatibility
+        self.model_name = local_config.get('model', 'base')
+        self.device = local_config.get('device', 'cpu')
+        self.language = local_config.get('language', 'en')
+        
         self._load_model()
+    
+    def _setup_api_transcription(self) -> None:
+        """Setup API transcription provider."""
+        try:
+            api_config = self.config.get('api', {})
+            provider_name = api_config.get('provider', 'openrouter')
+            
+            if provider_name == 'openrouter':
+                self.api_provider = OpenRouterProvider(api_config)
+                logger.info("OpenRouter transcription provider initialized")
+            elif provider_name == 'huggingface':
+                self.api_provider = HuggingFaceProvider(api_config)
+                logger.info("HuggingFace transcription provider initialized")
+            else:
+                logger.warning(f"Unknown API provider: {provider_name}")
+                
+        except Exception as e:
+            logger.error(f"Failed to setup API provider: {e}")
+            if self.processing_mode in ['api_transcription', 'full_api']:
+                if not self.config.get('api', {}).get('fallback_to_local', False):
+                    raise
+            logger.warning("Continuing without API provider")
     
     def _load_model(self) -> None:
         """Load the Whisper model."""
@@ -64,11 +107,55 @@ class Transcriber:
             
         except Exception as e:
             logger.error(f"❌ Failed to load Whisper model: {str(e)}")
-            raise
+            if self.processing_mode == 'basic':
+                raise
+            logger.warning("Continuing without local model")
     
     def transcribe_audio(self, audio_path: str, output_path: str) -> Optional[Dict[str, Any]]:
         """
-        Transcribe audio file to text.
+        Transcribe audio file to text using the configured method.
+        
+        Args:
+            audio_path: Path to the audio file
+            output_path: Path to save the transcription
+            
+        Returns:
+            dict: Transcription result with metadata or None if failed
+        """
+        if not os.path.exists(audio_path):
+            logger.error(f"Audio file not found: {audio_path}")
+            return None
+        
+        # Try API transcription first if configured
+        if self.processing_mode in ['api_transcription', 'full_api'] and self.api_provider:
+            try:
+                logger.info(f"Attempting API transcription: {os.path.basename(audio_path)}")
+                start_time = time.time()
+                
+                api_result = self.api_provider.transcribe_audio(audio_path)
+                processing_time = time.time() - start_time
+                
+                # Enhance API result with metadata
+                enhanced_result = self._enhance_api_result(api_result, audio_path, processing_time)
+                
+                # Save transcription
+                if self._save_transcription(enhanced_result, output_path):
+                    logger.info(f"✅ API transcription completed in {processing_time:.2f} seconds")
+                    logger.info(f"Text length: {len(enhanced_result['text'])} characters")
+                    return enhanced_result
+                    
+            except Exception as e:
+                logger.error(f"API transcription failed: {e}")
+                if not self.config.get('api', {}).get('fallback_to_local', True):
+                    return None
+                logger.info("Falling back to local transcription")
+        
+        # Use local Whisper transcription
+        return self._transcribe_local(audio_path, output_path)
+    
+    def _transcribe_local(self, audio_path: str, output_path: str) -> Optional[Dict[str, Any]]:
+        """
+        Transcribe using local Whisper model.
         
         Args:
             audio_path: Path to the audio file
@@ -81,12 +168,8 @@ class Transcriber:
             logger.error("Whisper model not loaded")
             return None
         
-        if not os.path.exists(audio_path):
-            logger.error(f"Audio file not found: {audio_path}")
-            return None
-        
         try:
-            logger.info(f"Transcribing audio: {os.path.basename(audio_path)}")
+            logger.info(f"Transcribing audio locally: {os.path.basename(audio_path)}")
             start_time = time.time()
             
             # Prepare transcription options
@@ -105,7 +188,7 @@ class Transcriber:
             
             # Save transcription
             if self._save_transcription(enhanced_result, output_path):
-                logger.info(f"✅ Transcription completed in {processing_time:.2f} seconds")
+                logger.info(f"✅ Local transcription completed in {processing_time:.2f} seconds")
                 logger.info(f"Text length: {len(enhanced_result['text'])} characters")
                 return enhanced_result
             else:
@@ -113,35 +196,92 @@ class Transcriber:
                 return None
                 
         except Exception as e:
-            logger.error(f"❌ Transcription failed: {str(e)}")
+            logger.error(f"❌ Local transcription failed: {str(e)}")
             return None
     
     def _build_transcription_options(self) -> Dict[str, Any]:
         """
-        Build transcription options from configuration.
+        Build transcription options from local configuration.
         
         Returns:
             dict: Whisper transcription options
         """
+        # Use local config or fallback to root config for compatibility
+        local_config = self.config.get('local', self.config)
         options = {}
         
-        # Language setting
+        # Language settings
         if self.language and self.language != 'auto':
             options['language'] = self.language
         
-        # Advanced options
-        for key in ['temperature', 'best_of', 'beam_size', 'patience', 
-                   'length_penalty', 'suppress_tokens', 'initial_prompt',
-                   'condition_on_previous_text', 'word_timestamps',
-                   'prepend_punctuations', 'append_punctuations']:
-            if key in self.config:
-                options[key] = self.config[key]
+        # Performance settings
+        options['fp16'] = local_config.get('fp16', False)
+        options['temperature'] = local_config.get('temperature', 0.0)
+        options['best_of'] = local_config.get('best_of', 5)
+        options['beam_size'] = local_config.get('beam_size', 5)
+        options['patience'] = local_config.get('patience', 1.0)
+        options['length_penalty'] = local_config.get('length_penalty', 1.0)
         
-        # FP16 precision (GPU only)
-        if self.device != 'cpu' and self.config.get('fp16', False):
-            options['fp16'] = True
+        # Token suppression
+        suppress_tokens = local_config.get('suppress_tokens', [-1])
+        if suppress_tokens:
+            options['suppress_tokens'] = suppress_tokens
+        
+        # Context and prompting
+        initial_prompt = local_config.get('initial_prompt', '')
+        if initial_prompt:
+            options['initial_prompt'] = initial_prompt
+        
+        options['condition_on_previous_text'] = local_config.get(
+            'condition_on_previous_text', True
+        )
+        
+        # Timestamp settings
+        options['word_timestamps'] = local_config.get('word_timestamps', False)
+        
+        # Punctuation settings
+        prepend_punct = local_config.get('prepend_punctuations', '')
+        if prepend_punct:
+            options['prepend_punctuations'] = prepend_punct
+        
+        append_punct = local_config.get('append_punctuations', '')
+        if append_punct:
+            options['append_punctuations'] = append_punct
         
         return options
+    
+    def _enhance_api_result(self, api_result: Dict[str, Any], audio_path: str, processing_time: float) -> Dict[str, Any]:
+        """
+        Enhance API transcription result with additional metadata.
+        
+        Args:
+            api_result: Raw API transcription result
+            audio_path: Path to the source audio file
+            processing_time: Time taken for transcription
+            
+        Returns:
+            dict: Enhanced result with metadata
+        """
+        enhanced_result = {
+            'text': api_result.get('text', ''),
+            'language': api_result.get('language', 'unknown'),
+            'segments': api_result.get('segments', []),
+            'metadata': {
+                'source_audio': audio_path,
+                'processing_time': processing_time,
+                'model_used': api_result.get('model', 'unknown'),
+                'provider': api_result.get('provider', 'unknown'),
+                'method': 'api',
+                'character_count': len(api_result.get('text', '')),
+                'word_count': len(api_result.get('text', '').split()),
+                'timestamp': time.time()
+            }
+        }
+        
+        # Add quality metrics
+        enhanced_result['quality'] = self._calculate_quality_metrics(enhanced_result)
+        
+        return enhanced_result
     
     def _enhance_transcription_result(self, result: Dict[str, Any], 
                                    audio_path: str, processing_time: float) -> Dict[str, Any]:

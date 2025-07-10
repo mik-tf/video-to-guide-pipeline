@@ -2,7 +2,7 @@
 """
 Guide Generation Module
 
-Transforms transcriptions into structured markdown guides using templates and AI-assisted processing.
+Transforms transcriptions into structured markdown guides using templates, local AI, or API providers.
 """
 
 import os
@@ -20,26 +20,52 @@ except ImportError:
     JINJA2_AVAILABLE = False
     logging.warning("Jinja2 not available. Install with: pip install Jinja2")
 
+from providers.ollama_provider import OllamaProvider
+from providers.openrouter import OpenRouterProvider
+
 logger = logging.getLogger(__name__)
 
 
 class GuideGenerator:
     """
-    Generates structured markdown guides from transcriptions using templates.
+    Generates structured markdown guides from transcriptions using templates, local AI, or API providers.
     
-    Provides intelligent text processing, section extraction, and formatting.
+    Provides intelligent text processing, section extraction, and AI-powered guide generation.
     """
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], processing_mode: str = 'basic'):
         """
         Initialize the GuideGenerator.
         
         Args:
             config: Configuration dictionary with guide generation settings
+            processing_mode: Processing mode (basic, local_ai, api_generation, full_api, hybrid)
         """
         self.config = config.get('guide_generation', {})
+        self.processing_mode = processing_mode
         self.template_dir = config.get('templates', {}).get('base_dir', './templates')
-        self.default_template = self.config.get('template', 'deployment_guide')
+        
+        # AI providers
+        self.ollama_provider = None
+        self.api_provider = None
+        
+        # Initialize based on processing mode
+        # Template generation setup (for basic, hybrid, and as fallback for all modes)
+        if processing_mode in ['basic', 'hybrid', 'local_ai', 'api_generation', 'full_api']:
+            self._setup_template_generation()
+        
+        # Local AI setup
+        if processing_mode in ['local_ai', 'hybrid']:
+            self._setup_local_ai()
+        
+        # API generation setup
+        if processing_mode in ['api_generation', 'full_api', 'hybrid']:
+            self._setup_api_generation()
+    
+    def _setup_template_generation(self):
+        """Setup template-based generation."""
+        template_config = self.config.get('template', {})
+        self.default_template = template_config.get('name', 'deployment_guide')
         
         # Initialize Jinja2 environment
         if JINJA2_AVAILABLE:
@@ -48,19 +74,120 @@ class GuideGenerator:
                 trim_blocks=True,
                 lstrip_blocks=True
             )
+            logger.info("Template generation initialized")
         else:
             self.jinja_env = None
             logger.warning("Jinja2 not available - template functionality limited")
     
+    def _setup_local_ai(self):
+        """Setup local AI generation with Ollama."""
+        try:
+            local_ai_config = self.config.get('local_ai', {})
+            self.ollama_provider = OllamaProvider(local_ai_config)
+            
+            if self.ollama_provider.is_available():
+                logger.info("Local AI (Ollama) generation initialized")
+            else:
+                logger.warning("Ollama server not available")
+                if self.processing_mode == 'local_ai':
+                    if not local_ai_config.get('fallback_to_template', True):
+                        raise ConnectionError("Ollama required but not available")
+                
+        except Exception as e:
+            logger.error(f"Failed to setup local AI: {e}")
+            if self.processing_mode == 'local_ai':
+                if not self.config.get('local_ai', {}).get('fallback_to_template', True):
+                    raise
+            logger.warning("Continuing without local AI")
+    
+    def _setup_api_generation(self):
+        """Setup API-based guide generation."""
+        try:
+            api_config = self.config.get('api', {})
+            provider_name = api_config.get('provider', 'openrouter')
+            
+            if provider_name == 'openrouter':
+                self.api_provider = OpenRouterProvider(api_config)
+                logger.info("API guide generation (OpenRouter) initialized")
+            else:
+                logger.warning(f"Unknown API provider: {provider_name}")
+                
+        except Exception as e:
+            logger.error(f"Failed to setup API provider: {e}")
+            if self.processing_mode in ['api_generation', 'full_api']:
+                if not self.config.get('api', {}).get('fallback_to_local_ai', True):
+                    raise
+            logger.warning("Continuing without API provider")
+    
     def generate_guide(self, transcription_result: Dict[str, Any], 
                       output_path: str, template_name: Optional[str] = None) -> bool:
         """
-        Generate a markdown guide from transcription result.
+        Generate a markdown guide from transcription result using the configured method.
         
         Args:
             transcription_result: Enhanced transcription result with metadata
             output_path: Path to save the generated guide
-            template_name: Template to use (optional, uses default if not specified)
+            template_name: Template to use (optional, for template mode)
+            
+        Returns:
+            bool: True if guide generated successfully
+        """
+        try:
+            transcription_text = transcription_result['text']
+            context = {
+                'title': self._extract_title(transcription_text),
+                'metadata': transcription_result.get('metadata', {})
+            }
+            
+            # Try API generation first if configured
+            if self.processing_mode in ['api_generation', 'full_api'] and self.api_provider:
+                try:
+                    logger.info("Attempting API guide generation")
+                    guide_content = self.api_provider.generate_guide(transcription_text, context)
+                    
+                    if self._save_guide(guide_content, output_path):
+                        logger.info(f"✅ API guide generated successfully: {output_path}")
+                        return True
+                        
+                except Exception as e:
+                    logger.error(f"API guide generation failed: {e}")
+                    if not self.config.get('api', {}).get('fallback_to_local_ai', True):
+                        return False
+                    logger.info("Falling back to local AI generation")
+            
+            # Try local AI generation
+            if self.processing_mode in ['local_ai', 'hybrid'] and self.ollama_provider:
+                try:
+                    if self.ollama_provider.is_available():
+                        logger.info("Attempting local AI guide generation")
+                        guide_content = self.ollama_provider.generate_guide(transcription_text, context)
+                        
+                        if self._save_guide(guide_content, output_path):
+                            logger.info(f"✅ Local AI guide generated successfully: {output_path}")
+                            return True
+                            
+                except Exception as e:
+                    logger.error(f"Local AI guide generation failed: {e}")
+                    if not self.config.get('local_ai', {}).get('fallback_to_template', True):
+                        return False
+                    logger.info("Falling back to template generation")
+            
+            # Use template-based generation as fallback
+            return self._generate_template_guide(transcription_result, output_path, template_name)
+                
+        except Exception as e:
+            logger.error(f"❌ Guide generation failed: {str(e)}")
+            return False
+    
+    def _generate_template_guide(self, transcription_result: Dict[str, Any], 
+                               output_path: str, template_name: Optional[str] = None) -> bool:
+        """
+        Generate guide using template-based approach.
+        
+        Args:
+            transcription_result: Enhanced transcription result with metadata
+            output_path: Path to save the generated guide
+            template_name: Template to use (optional)
             
         Returns:
             bool: True if guide generated successfully
@@ -86,7 +213,7 @@ class GuideGenerator:
             if guide_content:
                 # Save the guide
                 if self._save_guide(guide_content, output_path):
-                    logger.info(f"✅ Guide generated successfully: {output_path}")
+                    logger.info(f"✅ Template guide generated successfully: {output_path}")
                     return True
                 else:
                     logger.error("❌ Failed to save guide")
@@ -96,7 +223,7 @@ class GuideGenerator:
                 return False
                 
         except Exception as e:
-            logger.error(f"❌ Guide generation failed: {str(e)}")
+            logger.error(f"❌ Template guide generation failed: {str(e)}")
             return False
     
     def _process_transcription_text(self, text: str) -> str:

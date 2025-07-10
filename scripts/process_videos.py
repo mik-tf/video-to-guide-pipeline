@@ -12,6 +12,10 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
+
 # Add src directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
@@ -31,20 +35,25 @@ class VideoPipeline:
     Main pipeline orchestrator for video-to-guide conversion.
     """
     
-    def __init__(self, config_path: str):
+    def __init__(self, config_path: str, processing_mode: str = None):
         """
         Initialize the pipeline.
         
         Args:
             config_path: Path to configuration file
+            processing_mode: Override processing mode from config
         """
         self.config = load_config(config_path)
         self.logger = setup_logging(self.config)
         
-        # Initialize components
+        # Determine processing mode
+        self.processing_mode = processing_mode or self.config.get('processing_mode', 'basic')
+        logger.info(f"🔧 Pipeline mode: {self.processing_mode}")
+        
+        # Initialize components with processing mode
         self.audio_extractor = AudioExtractor(self.config)
-        self.transcriber = Transcriber(self.config)
-        self.guide_generator = GuideGenerator(self.config)
+        self.transcriber = Transcriber(self.config, self.processing_mode)
+        self.guide_generator = GuideGenerator(self.config, self.processing_mode)
         
         # Output directories
         self.output_config = self.config.get('output', {})
@@ -245,17 +254,29 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Process a single video
+  # Process a single video (basic template mode)
   python process_videos.py --input video.mp4
   
-  # Process all videos in a directory
-  python process_videos.py --batch --input ./videos/
+  # Process with local AI (Ollama)
+  python process_videos.py --input video.mp4 --mode local_ai
   
-  # Use custom template
+  # Process with API transcription + template guide
+  python process_videos.py --input video.mp4 --mode api_transcription
+  
+  # Process with full API (transcription + guide generation)
+  python process_videos.py --input video.mp4 --mode full_api
+  
+  # Process with hybrid mode (API -> local AI -> template fallback)
+  python process_videos.py --input video.mp4 --mode hybrid
+  
+  # Process all videos in a directory
+  python process_videos.py --batch --input ./videos/ --mode local_ai
+  
+  # Use custom template with basic mode
   python process_videos.py --input video.mp4 --template tutorial
   
   # Use custom config
-  python process_videos.py --input video.mp4 --config custom.yaml
+  python process_videos.py --input video.mp4 --config custom.yaml --mode hybrid
         """
     )
     
@@ -274,6 +295,12 @@ Examples:
     parser.add_argument(
         '--template', '-t',
         help='Template name to use for guide generation'
+    )
+    
+    parser.add_argument(
+        '--mode', '-m',
+        choices=['basic', 'local_ai', 'api_transcription', 'api_generation', 'full_api', 'hybrid'],
+        help='Processing mode: basic (template only), local_ai (Ollama), api_transcription (API transcription), api_generation (API guide gen), full_api (API for both), hybrid (fallback chain)'
     )
     
     parser.add_argument(
@@ -323,8 +350,8 @@ Examples:
         sys.exit(1)
     
     try:
-        # Initialize pipeline
-        pipeline = VideoPipeline(args.config)
+        # Initialize pipeline with processing mode
+        pipeline = VideoPipeline(args.config, args.mode)
         
         # Override config with command line arguments
         if args.overwrite:
